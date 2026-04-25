@@ -1,12 +1,10 @@
 /**
- * Configuration centrale Auth.js v5 (NextAuth).
- * - Adapter Prisma (sessions DB).
- * - Aucun provider en dur en MVP : la liste `providers` est vide
- *   et sera enrichie plus tard (Google, Email, Credentials...).
- * - Augmente la Session pour exposer userId / roles.
+ * Configuration NextAuth v4 (stable, production-ready).
+ * Adapter Prisma + sessions JWT + augmentations de types pour exposer
+ * userId et roles dans la session.
  */
-import NextAuth, { type DefaultSession, type NextAuthConfig } from 'next-auth';
-import { PrismaAdapter } from '@auth/prisma-adapter';
+import type { NextAuthOptions } from 'next-auth';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 
 declare module 'next-auth' {
@@ -14,56 +12,46 @@ declare module 'next-auth' {
     user: {
       id: string;
       roles: string[];
-    } & DefaultSession['user'];
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    };
   }
 }
 
-interface CustomTokenFields {
-  userId?: string;
-  roles?: string[];
+declare module 'next-auth/jwt' {
+  interface JWT {
+    userId?: string;
+    roles?: string[];
+  }
 }
 
-function readUserId(token: Record<string, unknown>): string | undefined {
-  const v = token.userId;
-  return typeof v === 'string' ? v : undefined;
-}
-
-function readRoles(token: Record<string, unknown>): string[] {
-  const v = token.roles;
-  if (!Array.isArray(v)) return [];
-  return v.filter((x): x is string => typeof x === 'string');
-}
-
-export const authConfig: NextAuthConfig = {
+export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
+  // Aucun provider en MVP — à enrichir plus tard.
   providers: [],
   callbacks: {
     async jwt({ token, user }) {
       if (user && typeof user.id === 'string') {
         const userId = user.id;
+        token.userId = userId;
         const userRoles = await prisma.userRole.findMany({
           where: { userId },
           include: { role: true },
         });
-        const slugs = userRoles.map(
+        token.roles = userRoles.map(
           (ur: { role: { slug: string } }) => ur.role.slug,
         );
-        const patch: CustomTokenFields = { userId, roles: slugs };
-        return { ...token, ...patch };
       }
       return token;
     },
     async session({ session, token }) {
-      const tokenRecord = token as Record<string, unknown>;
-      const userId = readUserId(tokenRecord);
-      if (userId !== undefined) {
-        session.user.id = userId;
-        session.user.roles = readRoles(tokenRecord);
+      if (typeof token.userId === 'string') {
+        session.user.id = token.userId;
+        session.user.roles = token.roles ?? [];
       }
       return session;
     },
   },
 };
-
-export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

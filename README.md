@@ -33,6 +33,15 @@ Versions testées sur macOS :
 > ```bash
 > brew services stop postgresql@16 && brew uninstall postgresql@16
 > ```
+>
+> ⚠️ **Pas de `NODE_ENV` dans ton shell.** Vérifie :
+> ```bash
+> grep NODE_ENV ~/.zshrc ~/.bash_profile 2>/dev/null
+> ```
+> Si une ligne `export NODE_ENV=...` apparaît, **supprime-la**. Next/Node
+> définissent `NODE_ENV` automatiquement (`development` pour `next dev`,
+> `production` pour `next build`, `test` pour Vitest). Une valeur fixée
+> à la main casse `next build` au prerender (`<Html> outside _document`).
 
 ---
 

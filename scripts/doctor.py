@@ -63,6 +63,19 @@ def run(cmd: list[str], timeout: int = 5) -> tuple[int, str]:
 # --- checks ----------------------------------------------------------------
 
 
+def check_no_shell_node_env() -> bool:
+    """NODE_ENV exporté dans le shell casse `next build` (prerender <Html>)."""
+    val = os.environ.get("NODE_ENV")
+    if not val:
+        ok("Aucun NODE_ENV exporté dans le shell")
+        return True
+    fail(
+        f"NODE_ENV='{val}' est exporté dans ton shell. "
+        f"Supprime la ligne `export NODE_ENV=...` de ~/.zshrc puis recharge."
+    )
+    return False
+
+
 def check_node() -> bool:
     if shutil.which("node") is None:
         fail("Node n'est pas installé.")
@@ -203,6 +216,7 @@ def check_node_modules() -> bool:
 def main() -> int:
     section("Outils requis")
     results: list[bool] = [
+        check_no_shell_node_env(),
         check_node(),
         check_pnpm(),
         check_docker(),
