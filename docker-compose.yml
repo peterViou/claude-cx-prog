@@ -1,0 +1,29 @@
+# Postgres local pour le dev — usage strict MVP.
+# Ne jamais utiliser ces credentials en production.
+#
+#   docker compose up -d        # démarrer
+#   docker compose ps           # vérifier "healthy"
+#   docker compose down         # arrêter
+#   docker compose down -v      # arrêter + supprimer le volume (reset complet)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: proquiymsa_odt_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: proquiymsa
+      POSTGRES_PASSWORD: proquiymsa_dev
+      POSTGRES_DB: proquiymsa_odt
+    ports:
+      - "5432:5432"
+    volumes:
+      - proquiymsa_odt_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proquiymsa -d proquiymsa_odt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  proquiymsa_odt_pgdata:

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: proquiymsa
+          POSTGRES_PASSWORD: proquiymsa_dev
+          POSTGRES_DB: proquiymsa_odt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U proquiymsa -d proquiymsa_odt"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://proquiymsa:proquiymsa_dev@localhost:5432/proquiymsa_odt?schema=public
+      AUTH_SECRET: ci-only-not-a-real-secret
+      AUTH_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Prisma generate
+        run: pnpm prisma generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Prisma migrate deploy (CI DB)
+        run: pnpm prisma migrate deploy
+
+      - name: Build
+        run: pnpm build

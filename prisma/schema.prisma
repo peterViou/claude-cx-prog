@@ -1,0 +1,230 @@
+// Prisma schema — MVP Proquiymsa ODT (socle technique)
+// Aucune logique ODT métier ici (volontaire).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// AUTH — User & sessions (Auth.js / NextAuth Prisma adapter)
+// =====================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  userRoles   UserRole[]
+  auditEvents AuditEvent[] @relation("AuditEventActor")
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// =====================================================================
+// RBAC — Role / UserRole
+// =====================================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  permissions Json     @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userRoles UserRole[]
+
+  @@index([slug])
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+
+  scope String?
+
+  assignedAt DateTime @default(now())
+  assignedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, scope])
+  @@index([userId])
+  @@index([roleId])
+}
+
+// =====================================================================
+// AUDIT
+// =====================================================================
+
+model AuditEvent {
+  id String @id @default(cuid())
+
+  actorUserId String?
+  actor       User?   @relation("AuditEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  action     String
+  targetType String?
+  targetId   String?
+
+  metadata Json @default("{}")
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+// =====================================================================
+// EXTERNAL REFERENCES — Pont MVP -> Zoho / Drive / Creator / autres
+// =====================================================================
+
+enum ExternalProvider {
+  ZOHO_CRM
+  ZOHO_BOOKS
+  ZOHO_INVENTORY
+  ZOHO_CREATOR
+  GOOGLE_DRIVE
+  OTHER
+}
+
+model ExternalReference {
+  id String @id @default(cuid())
+
+  internalType String
+  internalId   String
+
+  provider   ExternalProvider
+  resource   String?
+  externalId String
+
+  metadata Json @default("{}")
+
+  lastSyncedAt  DateTime?
+  lastSyncRunId String?
+  lastSyncRun   IntegrationSyncRun? @relation(fields: [lastSyncRunId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, resource, externalId])
+  @@index([internalType, internalId])
+  @@index([provider])
+}
+
+// =====================================================================
+// INTEGRATION SYNC
+// =====================================================================
+
+enum IntegrationSyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+model IntegrationSyncRun {
+  id String @id @default(cuid())
+
+  provider ExternalProvider
+  job      String
+
+  status     IntegrationSyncStatus @default(RUNNING)
+  startedAt  DateTime              @default(now())
+  finishedAt DateTime?
+
+  itemsRead    Int @default(0)
+  itemsWritten Int @default(0)
+  itemsFailed  Int @default(0)
+
+  metadata Json @default("{}")
+
+  triggeredBy String?
+
+  errors             IntegrationSyncError[]
+  externalReferences ExternalReference[]
+
+  @@index([provider, job])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model IntegrationSyncError {
+  id    String @id @default(cuid())
+  runId String
+  run   IntegrationSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  itemType String?
+  itemId   String?
+
+  code    String?
+  message String  @db.Text
+  payload Json    @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([runId])
+  @@index([code])
+}
